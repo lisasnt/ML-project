@@ -1,14 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from sklearn import linear_model
 from sklearn.model_selection import GridSearchCV, train_test_split
 from scipy import stats
-from sklearn.metrics import r2_score
-
-## DOMANDE Friday
-# 1. correct to use only y_train_train after splitting y_train?
-# 2. metodi in serie o parallelo?
 
 # Sum of Squared Errors (SSE)
 def calculate_sse(y_true, y_pred):
@@ -28,13 +24,13 @@ def mad_median_outlier_detection(data):
     madn = mad / 0.6745
     #Outlier detection 
     outliers = []
-    non_outlier = []
+    inlier = []
     for i, x in enumerate(data):
         if np.abs(x - median) / madn > 2.24:
             outliers.append(i)  # Record the index of the outlier
         else: 
-            non_outlier.append(i)
-    return non_outlier, outliers, median, mad, madn
+            inlier.append(i)
+    return inlier, outliers, median, mad, madn
 
 # Load data
 X_train = np.load('./input/X_train.npy')    # Air temperature, Water temperature, Wind speed, Wind direction, Illumination
@@ -55,27 +51,43 @@ y_train_test = y_train_test /np.linalg.norm(y_train_test)
 # 1.1 Z-score method
 z_scores = np.abs(stats.zscore(y_train))
 threshold = 3
-non_outlier_indices = np.where(z_scores <= threshold)[0]
+inlier_indices = np.where(z_scores <= threshold)[0]
 
-print("Number of inliers after Z-score:",non_outlier_indices.shape[0]) 
+print("Number of inliers after Z-score:",inlier_indices.shape[0]) 
 #Z-score isn't helpful! It is not suitable when data aren't well distributed    
 
 # 1.2 Interquartile Range (IQR) method 
+traindata = pd.DataFrame(X_train, columns=['X1', 'X2', 'X3', 'X4', 'X5'])
+traindata['y'] = y_train
+size0 = traindata.shape[0]
+def iqr_filter(data_column):
+    Q1 = np.percentile(data_column, 25)
+    Q3 = np.percentile(data_column, 75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    return (data_column >= lower_bound) & (data_column <= upper_bound)
+filtered_data = traindata.copy()
+for column in filtered_data.columns:
+    filtered_data = filtered_data[iqr_filter(filtered_data[column])]
+print("Number of inliers after IRQ: ",filtered_data.shape[0])
+'''
 Q1 = np.percentile(y_train, 25)
 Q3 = np.percentile(y_train, 75)
 IQR = Q3 - Q1
 lower_bound = Q1 - 1.5 * IQR
 upper_bound = Q3 + 1.5 * IQR
-non_outlier_indices = np.where((y_train >= lower_bound) & (y_train <= upper_bound))[0]
+inlier_indices = np.where((y_train >= lower_bound) & (y_train <= upper_bound))[0]
 outlier_indices = np.where((y_train < lower_bound) | (y_train > upper_bound))
-
-print("Number of inliers after IRQ:",non_outlier_indices.shape[0])
+print("Number of inliers after IRQ:",inlier_indices.shape[0])
+'''
 #Not that helpful  
 
+'''
 # 1.3 MAD-median rule method
-non_outlier, outliers, median, mad, madn = mad_median_outlier_detection(y_train)
-
-print("Number of inliers after MAD:", len(non_outlier))
+inlier, outliers, median, mad, madn = mad_median_outlier_detection(y_train)
+print("Number of inliers after MAD:", len(inlier))
+'''
 
 # 1.4 RANSAC regression and then outlier removal
 ransac = linear_model.RANSACRegressor(random_state=190)
@@ -90,7 +102,7 @@ print(f"Number of inliers after RANSAC: {np.sum(inlier_mask)}")
 X_train_clean_train, X_train_clean_test, \
     y_train_clean_train, y_train_clean_test = train_test_split(X_train_clean, y_train_clean, test_size=0.2, random_state=14)
 
-non_outlier, outliers, median, mad, madn = mad_median_outlier_detection(y_train_clean)
+inlier, outliers, median, mad, madn = mad_median_outlier_detection(y_train_clean)
 
 ## 2. LINEAR REGRESSION
 regr = linear_model.LinearRegression()
@@ -98,7 +110,7 @@ regr.fit(X_train_clean_train, y_train_clean_train)
 y_pred_train_test = regr.predict(X_train_clean_test)
 
 sse = calculate_sse(y_train_clean_test, y_pred_train_test)
-r2 = r2_score(y_train_clean_test, y_pred_train_test)
+r2 = calculate_r2(y_train_clean_test, y_pred_train_test)
 #print(f"Coefficients:", regr.coef_)
 #print(f"Intercept:", regr.intercept_)
 print(f"Linear Regression SSE: {sse}")
@@ -112,7 +124,7 @@ for i in range(len(feature_names)):
     plt.ylabel('Toxic Algae Concentration (y)')
     plt.title(f'{feature_names[i]} vs Toxic Algae Concentration')
     plt.legend()
-    plt.show()
+ #   plt.show()
 '''
 v1 = np.linspace(0, 0.3, 1000)
 v2 = np.linspace(0, 0.3, 1000)
@@ -154,7 +166,7 @@ lasso = linear_model.LassoCV(cv=15, random_state=190)
 lasso.fit(X_train_clean_train, y_train_clean_train)
 alpha_lasso = lasso.alpha_
 beta_lasso = lasso.coef_
-print(f"Best alpha: {lasso.alpha_}")
+print(f"Best alpha for Lasso: {lasso.alpha_}")
 y_pred_lassoCV = lasso.predict(X_train_clean_test)
 sse = calculate_sse(y_train_clean_test,y_pred_lassoCV)
 print("Lasso SSE: ", sse)
