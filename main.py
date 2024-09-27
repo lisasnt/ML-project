@@ -38,13 +38,7 @@ y_train = np.load('./input/y_train.npy')    # Concentration of toxic Algae
 X_test = np.load('./input/X_test.npy')      # Input  of the test set       
 
 feature_names = ['Air Temp (x1)', 'Water Temp (x2)', 'Wind Speed (x3)', 'Wind Dir (x4)', 'Illumination (x5)']
-'''
-# Normalization
-X_train_train = X_train_train /np.linalg.norm(X_train_train)
-y_train_train = y_train_train /np.linalg.norm(y_train_train)
-X_train_test = X_train_test /np.linalg.norm(X_train_test)
-y_train_test = y_train_test /np.linalg.norm(y_train_test)
-'''
+
 ## 1. OUTLAIER REMOVAL
 # 1.1 Z-score method
 z_scores = np.abs(stats.zscore(y_train))
@@ -91,13 +85,10 @@ fig, axs = plt.subplots(2, 3, figsize=(20, 12))
 fig.suptitle('Features vs Toxic Algae Concentration (Inliers and Outliers)', fontsize=16)
 for i, ax in enumerate(axs.flat):
     if i < len(feature_names):
-        # Plot inliers
         ax.scatter(X_train[inlier_mask, i], y_train[inlier_mask], 
                    color='blue', label='Inliers', alpha=0.5)
-        # Plot outliers
         ax.scatter(X_train[outlier_mask, i], y_train[outlier_mask], 
                    color='red', label='Outliers', alpha=0.5)
-        
         ax.set_xlabel(feature_names[i])
         ax.set_ylabel('Toxic Algae Concentration (y)')
         ax.set_title(f'{feature_names[i]} vs Toxic Algae Concentration')
@@ -165,7 +156,7 @@ print("Lasso SSE with GridSearchCV: ", sse)
 print(f"Linear Regression R^2: {r2}")
 '''
 
-#Lasso is the best one!
+#Lasso is the best one
 y_test = lasso.predict(X_test)
 np.save('y_test.npy', y_test)  
 
@@ -184,4 +175,3 @@ for i, ax in enumerate(axs.flat):
         fig.delaxes(ax) 
 plt.tight_layout()
 plt.show()
-
