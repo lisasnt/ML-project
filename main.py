@@ -37,6 +37,7 @@ X_train = np.load('./input/X_train.npy')    # Air temperature, Water temperature
 y_train = np.load('./input/y_train.npy')    # Concentration of toxic Algae
 X_test = np.load('./input/X_test.npy')      # Input  of the test set       
 
+feature_names = ['Air Temp (x1)', 'Water Temp (x2)', 'Wind Speed (x3)', 'Wind Dir (x4)', 'Illumination (x5)']
 '''
 # Normalization
 X_train_train = X_train_train /np.linalg.norm(X_train_train)
@@ -80,15 +81,35 @@ ransac = linear_model.RANSACRegressor(random_state=190)
 ransac.fit(X_train, y_train)
 y_pred_ransac = ransac.predict(X_train)
 inlier_mask = ransac.inlier_mask_
+outlier_mask = ~inlier_mask
 X_train_clean = X_train[inlier_mask]
 y_train_clean = y_train[inlier_mask]
 print(f"Number of inliers after RANSAC: {np.sum(inlier_mask)}")
 
+# Plot outliers in red
+fig, axs = plt.subplots(2, 3, figsize=(20, 12))
+fig.suptitle('Features vs Toxic Algae Concentration (Inliers and Outliers)', fontsize=16)
+for i, ax in enumerate(axs.flat):
+    if i < len(feature_names):
+        # Plot inliers
+        ax.scatter(X_train[inlier_mask, i], y_train[inlier_mask], 
+                   color='blue', label='Inliers', alpha=0.5)
+        # Plot outliers
+        ax.scatter(X_train[outlier_mask, i], y_train[outlier_mask], 
+                   color='red', label='Outliers', alpha=0.5)
+        
+        ax.set_xlabel(feature_names[i])
+        ax.set_ylabel('Toxic Algae Concentration (y)')
+        ax.set_title(f'{feature_names[i]} vs Toxic Algae Concentration')
+        ax.legend()
+    else:
+        fig.delaxes(ax) 
+plt.tight_layout()
+plt.show()
+
 # Create test and training set
 X_train_clean_train, X_train_clean_test, \
     y_train_clean_train, y_train_clean_test = train_test_split(X_train_clean, y_train_clean, test_size=0.2, random_state=14)
-
-inlier, outliers, median, mad, madn = mad_median_outlier_detection(y_train_clean)
 
 ## 2. LINEAR REGRESSION
 regr = linear_model.LinearRegression()
@@ -101,17 +122,6 @@ r2 = calculate_r2(y_train_clean_test, y_pred_train_test)
 #print(f"Intercept:", regr.intercept_)
 print(f"Linear Regression SSE:\t{sse}")
 print(f"Linear Regression R^2:\t{r2}")
-
-feature_names = ['Air Temp (x1)', 'Water Temp (x2)', 'Wind Speed (x3)', 'Wind Dir (x4)', 'Illumination (x5)']
-for i in range(len(feature_names)):
-    plt.scatter(X_train_clean_test[:, i], y_pred_train_test, color='orange', label='Prediction')
-    plt.scatter(X_train_clean_test[:, i], y_train_clean_test, color='blue', label='Test set')
-    plt.xlabel(feature_names[i])
-    plt.ylabel('Toxic Algae Concentration (y)')
-    plt.title(f'{feature_names[i]} vs Toxic Algae Concentration')
-    plt.legend()
- #   plt.show()
-
 
 ## 3. REGULARIZATION
 # Ridge Model
@@ -131,15 +141,13 @@ lasso = linear_model.LassoCV(cv=15, random_state=190)
 lasso.fit(X_train_clean_train, y_train_clean_train)
 alpha_lasso = lasso.alpha_
 beta_lasso = lasso.coef_
-print(f"Best alpha for Lasso: {lasso.alpha_}")
+#print(f"Best alpha for Lasso: {lasso.alpha_}")
 y_pred_lassoCV = lasso.predict(X_train_clean_test)
 sse = calculate_sse(y_train_clean_test,y_pred_lassoCV)
 r2 = calculate_r2(y_train_clean_test,y_pred_lassoCV)
 print("Lasso SSE:\t\t", sse)
 print("Lasso R^2:\t\t", r2)
 
-#Lasso is the best one
-np.save('y_test.npy', y_pred_lassoCV)   
 '''
 # Lasso Regression with grid search cv
 lasso = linear_model.Lasso()
@@ -156,3 +164,24 @@ r2 = calculate_r2(y_train_clean_test, y_pred_lasso)
 print("Lasso SSE with GridSearchCV: ", sse)
 print(f"Linear Regression R^2: {r2}")
 '''
+
+#Lasso is the best one!
+y_test = lasso.predict(X_test)
+np.save('y_test.npy', y_test)  
+
+# Plot Predictions vs test set
+fig, axs = plt.subplots(2, 3, figsize=(20, 12))
+fig.suptitle('Features vs Toxic Algae Concentration', fontsize=16)
+for i, ax in enumerate(axs.flat):
+    if i < len(feature_names):
+        ax.scatter(X_train_clean_test[:, i], y_pred_train_test, color='red', label='Prediction', alpha=0.5)
+        ax.scatter(X_train_clean_test[:, i], y_train_clean_test, color='blue', label='Test set', alpha=0.5)
+        ax.set_xlabel(feature_names[i])
+        ax.set_ylabel('Toxic Algae Concentration (y)')
+        ax.set_title(f'{feature_names[i]} vs Toxic Algae Concentration')
+        ax.legend()
+    else:
+        fig.delaxes(ax) 
+plt.tight_layout()
+plt.show()
+
