@@ -175,3 +175,5 @@ for i, ax in enumerate(axs.flat):
         fig.delaxes(ax) 
 plt.tight_layout()
 plt.show()
+
+print(y_test.shape)
