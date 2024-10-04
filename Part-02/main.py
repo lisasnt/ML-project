@@ -54,13 +54,35 @@ class ARXModel(BaseEstimator, RegressorMixin):
         
         return self
 
-    def predict(self, u):
+    def predict(self, u, phi0, uold):
         # Use the pre-built regressor matrix from fit
         if self.phi is None:
             raise ValueError("Model has not been fitted yet.")
         
+        phiI = phi0
+        
+        predictions = []
+        print(len(u))
+        for i in range(len(u)):
+            print(i)
+            yI = self.model.predict(phiI)
+            predictions.append(yI)
+
+            if i < (self.d + self.m):
+                phiI = yI.append(phiI)
+                phiI[self.n] = uold[-1]
+                phiI.pop()
+                uold.pop()
+
+            else:
+                phiI = yI.append(phiI)
+                phiI[self.n] = u[i-self.d-self.m]
+                phiI.pop()
+                
+
+        
         # Use the saved phi for prediction (no need to rebuild the regressor matrix)
-        return self.model.predict(self.phi)
+        return predictions
 
 def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range):
     best_sse = float('inf')
@@ -75,7 +97,20 @@ def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range)
                 model.fit(u_train, y_train)
                 
                 # Predict using the saved regressor matrix
-                y_pred = model.predict(u_test)  # Using the stored phi
+                # Step 1: Take the last 'n' elements from vector y
+                phi0 = model.y[-n:].tolist()
+
+                # Step 2: Add elements from vector u, from index end-d to end-d-m
+                u_part = model.u[-(d+1):-(d+m+1):-1].tolist()
+
+                # Step 3: Concatenate both parts
+                phi0.extend(u_part)
+
+                uold = model.u[-d:].tolist()
+
+                
+
+                y_pred = model.predict(u_test,phi0,uold)  # Using the stored phi
                 
                 # Calculate SSE (Sum of Squared Errors)
                 sse = calculate_sse(y_test, y_pred)
@@ -109,4 +144,4 @@ best_params, best_sse = brute_force_arx(u_train_train, y_train_train, u_train_te
 
 print("Best model parameters:", best_params)
 print("Best SSE:", best_sse)
-         
+print()
