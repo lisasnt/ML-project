@@ -19,7 +19,6 @@ class ARXModel(BaseEstimator, RegressorMixin):
         self.m = m  # Input order (past input)
         self.d = d  # Delay
         self.model = LinearRegression()
-        self.phi = None  # Placeholder for storing the regressor matrix
 
     def build_arx_regressor(self, u, y):
         N = len(y)
@@ -38,30 +37,36 @@ class ARXModel(BaseEstimator, RegressorMixin):
                 row.extend(u[k-self.d:k-self.d-self.m:-1])  # u(k-d), ..., u(k-d-m)
 
             # Append the row to the regressor matrix (ϕ)
-            phi.append(row)
+            if len(row) == (self.n + self.m):  # Ensure the row has the correct length
+                phi.append(row)
         
         return np.array(phi)
 
     def fit(self, u, y):
         # Build the ARX regressor matrix using past input (u) and output (y)
-        self.phi = self.build_arx_regressor(u, y)  # Store regressor matrix in the instance
+        phi_train = self.build_arx_regressor(u, y)  # Build regressor matrix during fit
+        
+        if phi_train.size == 0:  # Check if the regressor matrix is valid
+            raise ValueError(f"Invalid regressor matrix with n={self.n}, m={self.m}, d={self.d}.")
         
         # The target values are y[max(self.n, self.d + self.m):]
         y_target = y[max(self.n, self.d + self.m):]
         
         # Fit the linear regression model with the regressor matrix (X) and target values (Y)
-        self.model.fit(self.phi, y_target)
+        self.model.fit(phi_train, y_target)
         
         return self
 
-    def predict(self, u):
-        # Use the pre-built regressor matrix from fit
-        if self.phi is None:
-            raise ValueError("Model has not been fitted yet.")
+    def predict(self, u_test, y_train):
+        # Recalculate the ARX regressor matrix for the test set using test inputs and past y_train values
+        phi_test = self.build_arx_regressor(u_test, y_train)  # Build regressor matrix for test data
         
-        # Use the saved phi for prediction (no need to rebuild the regressor matrix)
-        return self.model.predict(self.phi)
-
+        if phi_test.size == 0:  # Check if the regressor matrix is valid
+            raise ValueError(f"Invalid test regressor matrix with n={self.n}, m={self.m}, d={self.d}.")
+        
+        # Use the fitted linear regression model to make predictions
+        return self.model.predict(phi_test)
+    
 def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range):
     best_sse = float('inf')
     best_params = None
@@ -69,22 +74,28 @@ def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range)
     for n in n_range:
         for m in m_range:
             for d in d_range:
-                model = ARXModel(n, m, d)
-                
-                # Fit the model with training data
-                model.fit(u_train, y_train)
-                
-                # Predict using the saved regressor matrix
-                y_pred = model.predict(u_test)  # Using the stored phi
-                
-                # Calculate SSE (Sum of Squared Errors)
-                sse = calculate_sse(y_test, y_pred)
-                
-                if sse < best_sse:
-                    best_sse = sse
-                    best_params = (n, m, d)
-                
-                print(f"n={n}, m={m}, d={d}: SSE={sse}")
+                try:
+                    model = ARXModel(n, m, d)
+                    
+                    # Fit the model with training data
+                    model.fit(u_train, y_train)
+                    
+                    # Predict using the recalculated regressor matrix
+                    y_pred = model.predict(u_test, y_train[-(max(n, d+m)):])
+
+                    # Slice the predictions to ensure they match the test set size
+                    y_pred = y_pred[:len(y_test)]  # Adjust prediction size if necessary
+                    
+                    # Calculate SSE (Sum of Squared Errors)
+                    sse = calculate_sse(y_test, y_pred)
+                    
+                    if sse < best_sse:
+                        best_sse = sse
+                        best_params = (n, m, d)
+                    
+                    print(f"n={n}, m={m}, d={d}: SSE={sse}")
+                except ValueError as e:
+                    print(f"Skipping combination n={n}, m={m}, d={d} due to error: {e}")
 
     return best_params, best_sse
 
@@ -109,4 +120,3 @@ best_params, best_sse = brute_force_arx(u_train_train, y_train_train, u_train_te
 
 print("Best model parameters:", best_params)
 print("Best SSE:", best_sse)
-         
