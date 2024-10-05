@@ -9,9 +9,6 @@ X (or ϕ) = regressor matrix
 Y = obtained after predict() 
 '''
 def calculate_sse(y_true, y_pred):
-    """
-    Calculate the Sum of Squared Errors (SSE)
-    """
     sse = np.sum((y_true - y_pred) ** 2)
     return sse
 
@@ -111,13 +108,13 @@ def predict_arx(u_test, y_train_train, model, n, m, d):
 
     return np.array(y_pred)
 
-def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range):
+def brute_force_arx(u_train, y_train, n_range, m_range, d_range):
     """
     Perform a brute-force search to find the best ARX parameters (n, m, d).
-    - u_train: input data (training)
-    - y_train: output data (training)
-    - u_test: input data (testing)
-    - y_test: output data (testing)
+    - u_train_train: input data (training)
+    - y_train_train: output data (training)
+    - u_train_test: input data (testing)
+    - y_train_test: output data (testing)
     - n_range: range for AR order
     - m_range: range for Input order
     - d_range: range for Delay
@@ -125,21 +122,29 @@ def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range)
     best_sse = float('inf')
     best_params = None
 
+    # Manually split train/test data
+    test_size = 510  
+    u_train_train = u_train[:-test_size]
+    u_train_test = u_train[-test_size:]
+    y_train_train = y_train[:-test_size]
+    y_train_test = y_train[-test_size:]
+
     for n in n_range:
         for m in m_range:
             for d in d_range:
                 try:
                     # Fit the ARX model with current n, m, d
-                    model = fit_arx(u_train, y_train, n, m, d)
+                    model = fit_arx(u_train_train, y_train_train, n, m, d)
                     
                     # Predict test outputs
-                    y_pred = predict_arx(u_test, y_train_train, model, n, m, d)
+                    
+                    y_pred = predict_arx(u_train_test, y_train_train, model, n, m, d)
 
                     # Slice the predictions to ensure they match the test set size
-                    y_pred = y_pred[:len(y_test)]  # Adjust prediction size if necessary
+                    y_pred = y_pred[:len(y_train_test)]  # Adjust prediction size if necessary
                     
                     # Calculate SSE (Sum of Squared Errors)
-                    sse = calculate_sse(y_test, y_pred)
+                    sse = calculate_sse(y_train_test, y_pred)
                     
                     if sse < best_sse:
                         best_sse = sse
@@ -160,15 +165,8 @@ n_range = range(1, 10)  # Number of past outputs
 m_range = range(1, 10)  # Number of past inputs
 d_range = range(1, 10)  # Delay parameter
 
-# Manually split train/test data
-test_size = 400  
-u_train_train = u_train[:-test_size]
-u_train_test = u_train[-test_size:]
-y_train_train = y_train[:-test_size]
-y_train_test = y_train[-test_size:]
-
 # Brute force search for the best ARX parameters
-best_params, best_sse = brute_force_arx(u_train_train, y_train_train, u_train_test, y_train_test, n_range, m_range, d_range)
+best_params, best_sse = brute_force_arx(u_train, y_train, n_range, m_range, d_range)
 
 print("Best model parameters:", best_params)
 print("Best SSE:", best_sse)
