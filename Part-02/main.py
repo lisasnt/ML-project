@@ -57,14 +57,19 @@ class ARXModel(BaseEstimator, RegressorMixin):
         
             # AutoRegressive terms (past output values)
             #if self.n > 0:
-            row.extend(y[k-1:k-self.n-1:-1])  # y(k-1), ..., y(k-n)
+
+            #row.extend(y[k-1:k-self.n-1:-1])  # y(k-1), ..., y(k-n)
+
+            y_reverse = (y[k-self.n:k:1])[::-1] #This is needed to get the first row of phi
+            row.extend(y_reverse)  # y(k-1), ..., y(k-n)
             
         
             # Exogenous terms (past input values)
             #if self.m > 0:
             
-            row.extend(u[k-self.d:k-self.d-self.m-1:-1])  # u(k-d), ..., u(k-d-m)
-            
+            #row.extend(u[k-self.d:k-self.d-self.m-1:-1])  # u(k-d), ..., u(k-d-m)
+            u_reverse = (u[k-self.d-self.m:k-self.d+1:1])[::-1]
+            row.extend(u_reverse)
             
 
         # Check if the row length matches the expected length
@@ -82,7 +87,7 @@ class ARXModel(BaseEstimator, RegressorMixin):
         self.phi = self.build_arx_regressor(u, y)  # Store regressor matrix in the instance
         
         # The target values are y[max(self.n, self.d + self.m):]
-        y_target = y[max(self.n+1, self.d + self.m+1):]
+        y_target = y[max(self.n, self.d + self.m):]
         
         # Fit the linear regression model with the regressor matrix (X) and target values (Y)
         self.model.fit(self.phi, y_target)
@@ -161,7 +166,7 @@ def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range)
     return best_params, best_sse, best_ypred
 
 
-def plot_validation(y_true, y_pred, test_size):
+def plot_validation(y_true, y_pred, u, test_size):
     
     # Generate x values corresponding to the index of the data points
     x_values_train = range(len(y_true))  # Last test_size points of y_train
@@ -175,6 +180,9 @@ def plot_validation(y_true, y_pred, test_size):
     # Plot the predicted values
     plt.plot(x_values_pred, y_pred, label='Best Prediction (y_pred)', color='red', linestyle='--')
 
+    # Plot input values
+    plt.plot(x_values_train, u, label='Input values u', color='green')
+
     plt.xlabel('Index')
     plt.ylabel('Values')
     plt.title('Comparison of y_train and Best Prediction')
@@ -184,18 +192,22 @@ def plot_validation(y_true, y_pred, test_size):
 
 
 
-def plot_results(y_train, best_ypred, test_size):
+def plot_results(y_train, best_ypred, u_train, u_test):
     # Generate x values corresponding to the index of the data points
-    x_values_train = range(len(y_train) - test_size, len(y_train))  # Last test_size points of y_train
-    x_values_pred = range(len(y_train), len(y_train) + len(best_ypred))  # Points for best_ypred
+    x_values_train = range(len(y_train))  # Last test_size points of y_train
+    x_values_pred = range(len(y_train)+1, len(y_train) + len(best_ypred)+1)  # Points for best_ypred
 
     plt.figure(figsize=(10, 6))
 
     # Plot the last 400 points of y_train
-    plt.plot(x_values_train, y_train[-test_size:], label='True y_train', color='blue')
+    plt.plot(x_values_train, y_train, label='True y_train', color='blue')
 
     # Plot the predicted values
     plt.plot(x_values_pred, best_ypred, label='Best Prediction (y_pred)', color='red', linestyle='--')
+
+    plt.plot(x_values_train, u_train, label='Input values u', color='green')
+
+    plt.plot(x_values_pred, u_test, label='Input values u', color='green')
 
     plt.xlabel('Index')
     plt.ylabel('Values')
@@ -227,4 +239,24 @@ print("Best model parameters:", best_params)
 print("Best SSE:", best_sse)
 print()
 # Plotting the results: y_train (last 400 points) and best_ypred (prediction)
-plot_validation(y_train, best_ypred, test_size)
+plot_validation(y_train, best_ypred,u_train, test_size)
+
+model = ARXModel()
+model.n, model.m, model.d = best_params
+model.fit(u_train,y_train)
+
+
+# Step 1: Take the last 'n' elements from vector y
+phi0 = y_train[-1:-(model.n+1):-1].tolist()
+
+# Step 2: Add elements from vector u, from index end-d to end-d-m
+u_part = u_train[-(model.d):-(model.d+model.m+1):-1].tolist()
+
+# Step 3: Concatenate both parts
+phi0.extend(u_part)
+
+uold = u_train[-1:-model.d:-1].tolist()
+
+y_test = model.predict(u_test,phi0,uold)
+
+plot_results(y_train,y_test, u_train, u_test)
