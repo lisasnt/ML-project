@@ -125,6 +125,7 @@ def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range)
                 phi0 = y_train[-1:-(n+1):-1].tolist()
 
                 # Step 2: Add elements from vector u, from index end-d to end-d-m
+                
                 u_part = u_train[-(d):-(d+m+1):-1].tolist()
 
                 # Step 3: Concatenate both parts
@@ -240,5 +241,11 @@ phi0.extend(u_part)
 uold = u_train[-1:-model.d:-1].tolist()
 
 y_test = model.predict(u_test,phi0,uold)
+
+y_submit = y_test[-400:]
+print('Check submission has right amount of elements', len(y_submit))
+
+#np.save('y_submit.npy', y_submit) #Save last 400 values for submission
+
 print('Alpha=',model.model.alpha_)
 plot_results(y_train,y_test, u_train, u_test)
