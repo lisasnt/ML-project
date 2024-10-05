@@ -22,7 +22,7 @@ class ARXModel(BaseEstimator, RegressorMixin):
         self.n = n  # AR order (past output)
         self.m = m  # Input order (past input)
         self.d = d  # Delay
-        self.model = RidgeCV() #Tried RidgeCV, LinearRegression and LassoCV. Lasso was bad, Ridge best and Lin similar
+        self.model = LinearRegression() #Tried RidgeCV, LinearRegression and LassoCV. Lasso was bad, Ridge best and Lin similar
         self.phi = None  # Placeholder for storing the regressor matrix
     
     def build_arx_regressor(self, u, y):
@@ -75,6 +75,30 @@ class ARXModel(BaseEstimator, RegressorMixin):
         
         return self
     
+    def check_stability(self):
+        """
+        Check the stability of the ARX model based on the roots of the AR characteristic equation.
+        Stability criterion: All roots must lie inside the unit circle in the complex plane.
+        """
+        if self.ar_coefficients is None:
+            raise ValueError("Model has not been fitted yet or AR coefficients are not available.")
+        
+        # Form the AR characteristic polynomial: 1 - θ_1 * z^{-1} - θ_2 * z^{-2} - ... - θ_n * z^{-n}
+        # We need to find the roots of the polynomial with coefficients [1, -θ_1, -θ_2, ..., -θ_n]
+        poly_coeffs = np.concatenate(([1], -self.ar_coefficients))
+        
+        # Calculate the roots of the characteristic polynomial
+        roots = np.roots(poly_coeffs)
+        
+        # Check if all roots lie inside the unit circle
+        stable = np.all(np.abs(roots) < 1)
+        
+        if stable:
+            return True
+        else:
+            return False
+        
+    
 
     def predict(self, u, phi0, uold):
         # Use the pre-built regressor matrix from fit
@@ -119,32 +143,38 @@ def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range)
                 
                 # Fit the model with training data
                 model.fit(u_train, y_train)
-                
-                # Predict using the saved regressor matrix
-                # Step 1: Take the last 'n' elements from vector y
-                phi0 = y_train[-1:-(n+1):-1].tolist()
 
-                # Step 2: Add elements from vector u, from index end-d to end-d-m
-                
-                u_part = u_train[-(d):-(d+m+1):-1].tolist()
+                if model.check_stability:
+                    # Predict using the saved regressor matrix
+                    # Step 1: Take the last 'n' elements from vector y
+                    phi0 = y_train[-1:-(n+1):-1].tolist()
 
-                # Step 3: Concatenate both parts
-                phi0.extend(u_part)
+                    # Step 2: Add elements from vector u, from index end-d to end-d-m
+                
+                    u_part = u_train[-(d):-(d+m+1):-1].tolist()
 
-                uold = u_train[-1:-d:-1].tolist()
+                    # Step 3: Concatenate both parts
+                    phi0.extend(u_part)
+
+                    uold = u_train[-1:-d:-1].tolist()
 
                 
 
-                y_pred = model.predict(u_test,phi0,uold)  # Using the stored phi
+                    y_pred = model.predict(u_test, phi0, uold)  # Using the stored phi
                 
-                # Calculate SSE (Sum of Squared Errors)
-                sse = calculate_sse(y_test, y_pred)
+                    # Calculate SSE (Sum of Squared Errors)
+                    sse = calculate_sse(y_test, y_pred)
                 
-                if sse < best_sse:
-                    best_sse = sse
-                    best_params = (n, m, d)
-                    best_ypred = y_pred
-                    print('Current best alpha', model.model.alpha_)
+                    if sse < best_sse:
+                        best_sse = sse
+                        best_params = (n, m, d)
+                        best_ypred = y_pred
+                        print('Current best parameters(n,m,d)',best_params)
+                        print('Current best SSE, ', sse)
+                        #print('Current best alpha', model.model.alpha_)
+                
+                
+                
 
     return best_params, best_sse, best_ypred
 
@@ -209,7 +239,8 @@ m_range = range(1, 10)  # Number of past inputs
 d_range = range(1, 10)  # Delay parameter
 
 # Manually split train/test data
-test_size = 510  
+test_size = int(len(u_train)*0.2)
+print('test size =',test_size)
 u_train_train = u_train[:-test_size]
 u_train_test = u_train[-test_size:]
 y_train_train = y_train[:-test_size]
@@ -247,5 +278,5 @@ print('Check submission has right amount of elements', len(y_submit))
 
 #np.save('y_submit.npy', y_submit) #Save last 400 values for submission
 
-print('Alpha=',model.model.alpha_)
+#print('Alpha=',model.model.alpha_)
 plot_results(y_train,y_test, u_train, u_test)
