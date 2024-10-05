@@ -52,17 +52,17 @@ class ARXModel(BaseEstimator, RegressorMixin):
         expected_length = self.n + self.m
     
         # Iterate from max(self.n, self.d + self.m) to ensure we have enough past data
-        for k in range(max(self.n, self.d + self.m), N):
+        for k in range(max(self.n, self.d + self.m), N): #k is going from p to N-1
             row = []
         
             # AutoRegressive terms (past output values)
             #if self.n > 0:
-            row.extend(y[k:k-self.n:-1])  # y(k-1), ..., y(k-n)
+            row.extend(y[k-1:k-self.n-1:-1])  # y(k-1), ..., y(k-n)
             
         
             # Exogenous terms (past input values)
             #if self.m > 0:
-            row.extend(u[k-self.d:k-self.d-self.m:-1])  # u(k-d), ..., u(k-d-m)
+            row.extend(u[k-self.d:k-self.d-self.m-1:-1])  # u(k-d), ..., u(k-d-m)
             
 
         # Check if the row length matches the expected length
@@ -98,66 +98,34 @@ class ARXModel(BaseEstimator, RegressorMixin):
         if self.phi is None:
             raise ValueError("Model has not been fitted yet.")
         
-        phiI = phi0.copy()  # Make sure we don't modify the original phi0 list
+        phi_k = phi0.copy()  # Make sure we don't modify the original phi0 list
         predictions = []
         
+        
 
-        for i in range(len(u)):
-            yI = self.model.predict([phiI])[0]  # Model expects 2D array
-            print('yI ',yI)
-            print('len phiI ',len(phiI))
+        for k in range(len(u)):
+            y_k = self.model.predict([phi_k])[0]  # Model expects 2D array
+            print('y_k ',y_k)
+            print('len phi_k ',len(phi_k))
             print('n-1 ',self.n-1)
             print('uold ', uold)
             print('d-m ',self.d + self.m)
-            predictions.append(yI)
+            predictions.append(y_k)
             
             # Update phiI (regressor matrix) for the next time step
-            if i < (self.d + self.m):
+            if len(uold) != 0:
                 # Use elements from uold for the initial iterations
-                phiI = [yI] + phiI[:-1]  # Add the latest prediction at the start and pop the last element
-                phiI[self.n-1] = uold[-1]  # Replace the relevant u term
+                phi_k = [y_k].extend(phi_k[:-1])  # Add the latest prediction at the start and pop the last element
+                phi_k[self.n] = uold[-1]  # Replace the relevant u term
                 uold.pop()  # Update uold
             else:
                 # Use elements from the u sequence after the initial iterations
-                phiI = [yI] + phiI[:-1]  # Add the latest prediction at the start and pop the last element
-                phiI[self.n] = u[i - self.d - self.m]  # Replace the relevant u term
+                phi_k = [y_k].extend(phi_k[:-1])  # Add the latest prediction at the start and pop the last element
+                phi_k[self.n] = u[k - self.d]  # Replace the relevant u term
         
         return np.array(predictions)
 
 
-""""
-    def predict1(self, u, phi0, uold):
-        # Use the pre-built regressor matrix from fit
-        if self.phi is None:
-            raise ValueError("Model has not been fitted yet.")
-        
-        phiI = phi0
-        
-        predictions = []
-        print(len(u))
-        
-        
-        for i in range(len(u)):
-            print(i)
-            yI = self.model.predict([phiI])[0]
-            predictions.append(yI)
-
-            if i < (self.d + self.m):
-                phiI = yI.extend(phiI)
-                phiI[self.n] = uold[-1]
-                phiI.pop()
-                uold.pop()
-
-            else:
-                phiI = yI.extend(phiI)
-                phiI[self.n] = u[i-self.d-self.m]
-                phiI.pop()
-                
-
-        
-        # Use the saved phi for prediction (no need to rebuild the regressor matrix)
-        return predictions
-"""
 
 def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range):
     best_sse = float('inf')
@@ -174,15 +142,16 @@ def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range)
                 
                 # Predict using the saved regressor matrix
                 # Step 1: Take the last 'n' elements from vector y
-                phi0 = y_train[-n:].tolist()
+                phi0 = y_train[-1:-(n+1):-1].tolist()
 
                 # Step 2: Add elements from vector u, from index end-d to end-d-m
-                u_part = u_train[-(d+1):-(d+m+1):-1].tolist()
+                u_part = u_train[-(d):-(d+m+1):-1].tolist()
 
                 # Step 3: Concatenate both parts
                 phi0.extend(u_part)
+                print('phi0=',phi0)
 
-                uold = u_train[-(d+m):].tolist()
+                uold = u_train[-1:-d:-1].tolist()
 
                 
 
@@ -230,7 +199,7 @@ m_range = range(1, 10)  # Number of past inputs
 d_range = range(1, 10)  # Delay parameter
 
 # Manually split train/test data
-test_size = 400  
+test_size = 510  
 u_train_train = u_train[:-test_size]
 u_train_test = u_train[-test_size:]
 y_train_train = y_train[:-test_size]
