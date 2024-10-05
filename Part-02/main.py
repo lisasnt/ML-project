@@ -2,6 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import RidgeCV
+from sklearn.linear_model import LassoCV
+
 
 '''
 Concepts:
@@ -19,31 +22,9 @@ class ARXModel(BaseEstimator, RegressorMixin):
         self.n = n  # AR order (past output)
         self.m = m  # Input order (past input)
         self.d = d  # Delay
-        self.model = LinearRegression()
+        self.model = RidgeCV() #Tried RidgeCV, LinearRegression and LassoCV. Lasso was bad, Ridge best and Lin similar
         self.phi = None  # Placeholder for storing the regressor matrix
-    """
-    def build_arx_regressor(self, u, y):
-        N = len(y)
-        phi = []
-
-        # Iterate from max(self.n, self.d + self.m) to ensure we have enough past data
-        for k in range(max(self.n, self.d + self.m), N):
-            row = []
-            
-            # AutoRegressive terms (past output values)
-            if self.n > 0:
-                row.extend(y[k-1:k-self.n-1:-1])  # y(k-1), ..., y(k-n)
-
-            # Exogenous terms (past input values)
-            if self.m > 0:
-                row.extend(u[k-self.d:k-self.d-self.m:-1])  # u(k-d), ..., u(k-d-m)
-
-            # Append the row to the regressor matrix (ϕ)
-            phi.append(row)
-        
-        return np.array(phi)
-    """
-
+    
     def build_arx_regressor(self, u, y):
         N = len(y)
         phi = []
@@ -162,6 +143,7 @@ def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range)
                     best_sse = sse
                     best_params = (n, m, d)
                     best_ypred = y_pred
+                    print('Current best alpha', model.model.alpha_)
 
     return best_params, best_sse, best_ypred
 
@@ -258,5 +240,5 @@ phi0.extend(u_part)
 uold = u_train[-1:-model.d:-1].tolist()
 
 y_test = model.predict(u_test,phi0,uold)
-
+print('Alpha=',model.model.alpha_)
 plot_results(y_train,y_test, u_train, u_test)
