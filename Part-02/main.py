@@ -49,7 +49,7 @@ class ARXModel(BaseEstimator, RegressorMixin):
         phi = []
     
         # Determine the expected length of each row in phi
-        expected_length = self.n + self.m
+        expected_length = self.n + self.m + 1
     
         # Iterate from max(self.n, self.d + self.m) to ensure we have enough past data
         for k in range(max(self.n, self.d + self.m), N): #k is going from p to N-1
@@ -62,19 +62,16 @@ class ARXModel(BaseEstimator, RegressorMixin):
         
             # Exogenous terms (past input values)
             #if self.m > 0:
+            
             row.extend(u[k-self.d:k-self.d-self.m-1:-1])  # u(k-d), ..., u(k-d-m)
+            
             
 
         # Check if the row length matches the expected length
             if len(row) == expected_length:
                 phi.append(row)
             else:
-                print('phi=',phi)
-                print('row=',row)
-                print('expected len=',expected_length)
-                print('N=',N)
-                print('y_k=',y[k-1:k-self.n-1:-1])
-                print('u_k=',u[k-self.d:k-self.d-self.m:-1])
+                
                 print(f"Warning: Skipping row at k={k} when n={self.n}, d={self.d} and m={self.m} because of inconsistent length")
 
         return np.array(phi)
@@ -85,7 +82,7 @@ class ARXModel(BaseEstimator, RegressorMixin):
         self.phi = self.build_arx_regressor(u, y)  # Store regressor matrix in the instance
         
         # The target values are y[max(self.n, self.d + self.m):]
-        y_target = y[max(self.n, self.d + self.m):]
+        y_target = y[max(self.n+1, self.d + self.m+1):]
         
         # Fit the linear regression model with the regressor matrix (X) and target values (Y)
         self.model.fit(self.phi, y_target)
@@ -105,25 +102,22 @@ class ARXModel(BaseEstimator, RegressorMixin):
 
         for k in range(len(u)):
             y_k = self.model.predict([phi_k])[0]  # Model expects 2D array
-            print('y_k ',y_k)
-            print('len phi_k ',len(phi_k))
-            print('n-1 ',self.n-1)
-            print('uold ', uold)
-            print('d-m ',self.d + self.m)
+            
             predictions.append(y_k)
             
             # Update phiI (regressor matrix) for the next time step
             if len(uold) != 0:
                 # Use elements from uold for the initial iterations
-                phi_k = [y_k].extend(phi_k[:-1])  # Add the latest prediction at the start and pop the last element
+                phi_k = [y_k] + (phi_k[:-1])  # Add the latest prediction at the start and pop the last element
                 phi_k[self.n] = uold[-1]  # Replace the relevant u term
                 uold.pop()  # Update uold
             else:
                 # Use elements from the u sequence after the initial iterations
-                phi_k = [y_k].extend(phi_k[:-1])  # Add the latest prediction at the start and pop the last element
+                phi_k = [y_k] + (phi_k[:-1])  # Add the latest prediction at the start and pop the last element
                 phi_k[self.n] = u[k - self.d]  # Replace the relevant u term
         
         return np.array(predictions)
+
 
 
 
@@ -149,7 +143,6 @@ def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range)
 
                 # Step 3: Concatenate both parts
                 phi0.extend(u_part)
-                print('phi0=',phi0)
 
                 uold = u_train[-1:-d:-1].tolist()
 
@@ -164,10 +157,32 @@ def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range)
                     best_sse = sse
                     best_params = (n, m, d)
                     best_ypred = y_pred
-                
-                print(f"n={n}, m={m}, d={d}: SSE={sse}")
 
     return best_params, best_sse, best_ypred
+
+
+def plot_validation(y_true, y_pred, test_size):
+    
+    # Generate x values corresponding to the index of the data points
+    x_values_train = range(len(y_true))  # Last test_size points of y_train
+    x_values_pred = range(len(y_true)-test_size, len(y_true))  # Points for best_ypred
+
+    plt.figure(figsize=(10, 6))
+
+    # Plot the last 400 points of y_train
+    plt.plot(x_values_train, y_train, label='True y_train', color='blue')
+
+    # Plot the predicted values
+    plt.plot(x_values_pred, y_pred, label='Best Prediction (y_pred)', color='red', linestyle='--')
+
+    plt.xlabel('Index')
+    plt.ylabel('Values')
+    plt.title('Comparison of y_train and Best Prediction')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+
 
 def plot_results(y_train, best_ypred, test_size):
     # Generate x values corresponding to the index of the data points
@@ -212,4 +227,4 @@ print("Best model parameters:", best_params)
 print("Best SSE:", best_sse)
 print()
 # Plotting the results: y_train (last 400 points) and best_ypred (prediction)
-plot_results(y_train, best_ypred, test_size)
+plot_validation(y_train, best_ypred, test_size)
