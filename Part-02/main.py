@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import LinearRegression
 
@@ -20,7 +21,7 @@ class ARXModel(BaseEstimator, RegressorMixin):
         self.d = d  # Delay
         self.model = LinearRegression()
         self.phi = None  # Placeholder for storing the regressor matrix
-
+    """
     def build_arx_regressor(self, u, y):
         N = len(y)
         phi = []
@@ -41,6 +42,43 @@ class ARXModel(BaseEstimator, RegressorMixin):
             phi.append(row)
         
         return np.array(phi)
+    """
+
+    def build_arx_regressor(self, u, y):
+        N = len(y)
+        phi = []
+    
+        # Determine the expected length of each row in phi
+        expected_length = self.n + self.m
+    
+        # Iterate from max(self.n, self.d + self.m) to ensure we have enough past data
+        for k in range(max(self.n, self.d + self.m), N):
+            row = []
+        
+            # AutoRegressive terms (past output values)
+            #if self.n > 0:
+            row.extend(y[k:k-self.n:-1])  # y(k-1), ..., y(k-n)
+            
+        
+            # Exogenous terms (past input values)
+            #if self.m > 0:
+            row.extend(u[k-self.d:k-self.d-self.m:-1])  # u(k-d), ..., u(k-d-m)
+            
+
+        # Check if the row length matches the expected length
+            if len(row) == expected_length:
+                phi.append(row)
+            else:
+                print('phi=',phi)
+                print('row=',row)
+                print('expected len=',expected_length)
+                print('N=',N)
+                print('y_k=',y[k-1:k-self.n-1:-1])
+                print('u_k=',u[k-self.d:k-self.d-self.m:-1])
+                print(f"Warning: Skipping row at k={k} when n={self.n}, d={self.d} and m={self.m} because of inconsistent length")
+
+        return np.array(phi)
+
 
     def fit(self, u, y):
         # Build the ARX regressor matrix using past input (u) and output (y)
@@ -53,8 +91,42 @@ class ARXModel(BaseEstimator, RegressorMixin):
         self.model.fit(self.phi, y_target)
         
         return self
+    
 
     def predict(self, u, phi0, uold):
+        # Use the pre-built regressor matrix from fit
+        if self.phi is None:
+            raise ValueError("Model has not been fitted yet.")
+        
+        phiI = phi0.copy()  # Make sure we don't modify the original phi0 list
+        predictions = []
+        
+
+        for i in range(len(u)):
+            yI = self.model.predict([phiI])[0]  # Model expects 2D array
+            print('yI ',yI)
+            print('len phiI ',len(phiI))
+            print('n-1 ',self.n-1)
+            print('uold ', uold)
+            print('d-m ',self.d + self.m)
+            predictions.append(yI)
+            
+            # Update phiI (regressor matrix) for the next time step
+            if i < (self.d + self.m):
+                # Use elements from uold for the initial iterations
+                phiI = [yI] + phiI[:-1]  # Add the latest prediction at the start and pop the last element
+                phiI[self.n-1] = uold[-1]  # Replace the relevant u term
+                uold.pop()  # Update uold
+            else:
+                # Use elements from the u sequence after the initial iterations
+                phiI = [yI] + phiI[:-1]  # Add the latest prediction at the start and pop the last element
+                phiI[self.n] = u[i - self.d - self.m]  # Replace the relevant u term
+        
+        return np.array(predictions)
+
+
+""""
+    def predict1(self, u, phi0, uold):
         # Use the pre-built regressor matrix from fit
         if self.phi is None:
             raise ValueError("Model has not been fitted yet.")
@@ -63,19 +135,21 @@ class ARXModel(BaseEstimator, RegressorMixin):
         
         predictions = []
         print(len(u))
+        
+        
         for i in range(len(u)):
             print(i)
-            yI = self.model.predict(phiI)
+            yI = self.model.predict([phiI])[0]
             predictions.append(yI)
 
             if i < (self.d + self.m):
-                phiI = yI.append(phiI)
+                phiI = yI.extend(phiI)
                 phiI[self.n] = uold[-1]
                 phiI.pop()
                 uold.pop()
 
             else:
-                phiI = yI.append(phiI)
+                phiI = yI.extend(phiI)
                 phiI[self.n] = u[i-self.d-self.m]
                 phiI.pop()
                 
@@ -83,10 +157,12 @@ class ARXModel(BaseEstimator, RegressorMixin):
         
         # Use the saved phi for prediction (no need to rebuild the regressor matrix)
         return predictions
+"""
 
 def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range):
     best_sse = float('inf')
     best_params = None
+    best_ypred = []
 
     for n in n_range:
         for m in m_range:
@@ -98,15 +174,15 @@ def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range)
                 
                 # Predict using the saved regressor matrix
                 # Step 1: Take the last 'n' elements from vector y
-                phi0 = model.y[-n:].tolist()
+                phi0 = y_train[-n:].tolist()
 
                 # Step 2: Add elements from vector u, from index end-d to end-d-m
-                u_part = model.u[-(d+1):-(d+m+1):-1].tolist()
+                u_part = u_train[-(d+1):-(d+m+1):-1].tolist()
 
                 # Step 3: Concatenate both parts
                 phi0.extend(u_part)
 
-                uold = model.u[-d:].tolist()
+                uold = u_train[-(d+m):].tolist()
 
                 
 
@@ -118,15 +194,36 @@ def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range)
                 if sse < best_sse:
                     best_sse = sse
                     best_params = (n, m, d)
+                    best_ypred = y_pred
                 
                 print(f"n={n}, m={m}, d={d}: SSE={sse}")
 
-    return best_params, best_sse
+    return best_params, best_sse, best_ypred
+
+def plot_results(y_train, best_ypred, test_size):
+    # Generate x values corresponding to the index of the data points
+    x_values_train = range(len(y_train) - test_size, len(y_train))  # Last test_size points of y_train
+    x_values_pred = range(len(y_train), len(y_train) + len(best_ypred))  # Points for best_ypred
+
+    plt.figure(figsize=(10, 6))
+
+    # Plot the last 400 points of y_train
+    plt.plot(x_values_train, y_train[-test_size:], label='True y_train', color='blue')
+
+    # Plot the predicted values
+    plt.plot(x_values_pred, best_ypred, label='Best Prediction (y_pred)', color='red', linestyle='--')
+
+    plt.xlabel('Index')
+    plt.ylabel('Values')
+    plt.title('Comparison of y_train and Best Prediction')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
 # Load data
-u_train = np.load('./input/u_train.npy')
-y_train = np.load('./input/output_train.npy')
-u_test = np.load('./input/u_test.npy')
+u_train = np.load('/Users/hugojarudd/Downloads/Machine Learning/ML-project/Part-02/input/u_train.npy')
+y_train = np.load('/Users/hugojarudd/Downloads/Machine Learning/ML-project/Part-02/input/output_train.npy')
+u_test = np.load('/Users/hugojarudd/Downloads/Machine Learning/ML-project/Part-02/input/u_test.npy')
 
 n_range = range(1, 10)  # Number of past outputs 
 m_range = range(1, 10)  # Number of past inputs
@@ -140,8 +237,10 @@ y_train_train = y_train[:-test_size]
 y_train_test = y_train[-test_size:]
 
 # Brute force search for the best ARX parameters
-best_params, best_sse = brute_force_arx(u_train_train, y_train_train, u_train_test, y_train_test, n_range, m_range, d_range)
+best_params, best_sse, best_ypred = brute_force_arx(u_train_train, y_train_train, u_train_test, y_train_test, n_range, m_range, d_range)
 
 print("Best model parameters:", best_params)
 print("Best SSE:", best_sse)
 print()
+# Plotting the results: y_train (last 400 points) and best_ypred (prediction)
+plot_results(y_train, best_ypred, test_size)
