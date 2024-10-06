@@ -3,9 +3,7 @@ import matplotlib.pyplot as plt
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import LinearRegression
 from sklearn.linear_model import RidgeCV
-from sklearn.linear_model import LassoCV
-
-
+from sklearn.linear_model import LassoCV    
 '''
 Concepts:
 Y=Xθ arx model in matrix form
@@ -43,7 +41,6 @@ class ARXModel(BaseEstimator, RegressorMixin):
 
             y_reverse = (y[k-self.n:k:1])[::-1] #This is needed to get the first row of phi
             row.extend(y_reverse)  # y(k-1), ..., y(k-n)
-            
         
             # Exogenous terms (past input values)
             #if self.m > 0:
@@ -52,7 +49,6 @@ class ARXModel(BaseEstimator, RegressorMixin):
             u_reverse = (u[k-self.d-self.m:k-self.d+1:1])[::-1]
             row.extend(u_reverse)
             
-
         # Check if the row length matches the expected length
             if len(row) == expected_length:
                 phi.append(row)
@@ -61,7 +57,6 @@ class ARXModel(BaseEstimator, RegressorMixin):
                 print(f"Warning: Skipping row at k={k} when n={self.n}, d={self.d} and m={self.m} because of inconsistent length")
 
         return np.array(phi)
-
 
     def fit(self, u, y):
         # Build the ARX regressor matrix using past input (u) and output (y)
@@ -98,8 +93,6 @@ class ARXModel(BaseEstimator, RegressorMixin):
         else:
             return False
         
-    
-
     def predict(self, u, phi0, uold):
         # Use the pre-built regressor matrix from fit
         if self.phi is None:
@@ -107,8 +100,6 @@ class ARXModel(BaseEstimator, RegressorMixin):
         
         phi_k = phi0.copy()  # Make sure we don't modify the original phi0 list
         predictions = []
-        
-        
 
         for k in range(len(u)):
             y_k = self.model.predict([phi_k])[0]  # Model expects 2D array
@@ -127,8 +118,6 @@ class ARXModel(BaseEstimator, RegressorMixin):
                 phi_k[self.n] = u[k - self.d]  # Replace the relevant u term
         
         return np.array(predictions)
-
-
 
 
 def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range):
@@ -158,8 +147,6 @@ def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range)
 
                     uold = u_train[-1:-d:-1].tolist()
 
-                
-
                     y_pred = model.predict(u_test, phi0, uold)  # Using the stored phi
                 
                     # Calculate SSE (Sum of Squared Errors)
@@ -173,9 +160,6 @@ def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range)
                         print('Current best SSE, ', sse)
                         #print('Current best alpha', model.model.alpha_)
                 
-                
-                
-
     return best_params, best_sse, best_ypred
 
 
@@ -203,8 +187,6 @@ def plot_validation(y_true, y_pred, u, test_size):
     plt.grid(True)
     plt.show()
 
-
-
 def plot_results(y_train, best_ypred, u_train, u_test):
     # Generate x values corresponding to the index of the data points
     x_values_train = range(len(y_train))  # Last test_size points of y_train
@@ -230,16 +212,16 @@ def plot_results(y_train, best_ypred, u_train, u_test):
     plt.show()
 
 # Load data
-u_train = np.load('/Users/hugojarudd/Downloads/Machine Learning/ML-project/Part-02/input/u_train.npy')
-y_train = np.load('/Users/hugojarudd/Downloads/Machine Learning/ML-project/Part-02/input/output_train.npy')
-u_test = np.load('/Users/hugojarudd/Downloads/Machine Learning/ML-project/Part-02/input/u_test.npy')
+u_train = np.load('./input/u_train.npy')
+y_train = np.load('./input/output_train.npy')
+u_test = np.load('./input/u_test.npy')
 
 n_range = range(1, 10)  # Number of past outputs 
 m_range = range(1, 10)  # Number of past inputs
 d_range = range(1, 10)  # Delay parameter
 
 # Manually split train/test data
-test_size = int(len(u_train)*0.2)
+test_size = 510 #int(len(u_train)*0.2)
 print('test size =',test_size)
 u_train_train = u_train[:-test_size]
 u_train_test = u_train[-test_size:]
@@ -259,7 +241,6 @@ model = ARXModel()
 model.n, model.m, model.d = best_params
 model.fit(u_train,y_train)
 
-
 # Step 1: Take the last 'n' elements from vector y
 phi0 = y_train[-1:-(model.n+1):-1].tolist()
 
@@ -274,7 +255,7 @@ uold = u_train[-1:-model.d:-1].tolist()
 y_test = model.predict(u_test,phi0,uold)
 
 y_submit = y_test[-400:]
-print('Check submission has right amount of elements', len(y_submit))
+print('Check submission has right amount of elements:', len(y_submit))
 
 #np.save('y_submit.npy', y_submit) #Save last 400 values for submission
 
