@@ -21,7 +21,7 @@ class ARXModel(BaseEstimator, RegressorMixin):
         self.m = m  # Input order (past input)
         self.d = d  # Delay
         self.model = LinearRegression() #Tried RidgeCV, LinearRegression and LassoCV. Lasso was bad, Ridge best and Lin similar
-        self.phi = None  # Placeholder for storing the regressor matrix
+        self.phi = None 
     
     def build_arx_regressor(self, u, y):
         N = len(y)
@@ -30,41 +30,27 @@ class ARXModel(BaseEstimator, RegressorMixin):
         # Determine the expected length of each row in phi
         expected_length = self.n + self.m + 1
     
-        # Iterate from max(self.n, self.d + self.m) to ensure we have enough past data
         for k in range(max(self.n, self.d + self.m), N): #k is going from p to N-1
+
             row = []
-        
             # AutoRegressive terms (past output values)
-            #if self.n > 0:
-
-            #row.extend(y[k-1:k-self.n-1:-1])  # y(k-1), ..., y(k-n)
-
-            y_reverse = (y[k-self.n:k:1])[::-1] #This is needed to get the first row of phi
+            y_reverse = (y[k-self.n:k:1])[::-1]            
             row.extend(y_reverse)  # y(k-1), ..., y(k-n)
-        
             # Exogenous terms (past input values)
-            #if self.m > 0:
-            
-            #row.extend(u[k-self.d:k-self.d-self.m-1:-1])  # u(k-d), ..., u(k-d-m)
             u_reverse = (u[k-self.d-self.m:k-self.d+1:1])[::-1]
             row.extend(u_reverse)
             
-        # Check if the row length matches the expected length
             if len(row) == expected_length:
                 phi.append(row)
-            else:
-                
+            else:   
                 print(f"Warning: Skipping row at k={k} when n={self.n}, d={self.d} and m={self.m} because of inconsistent length")
 
         return np.array(phi)
 
     def fit(self, u, y):
-        # Build the ARX regressor matrix using past input (u) and output (y)
-        self.phi = self.build_arx_regressor(u, y)  # Store regressor matrix in the instance
-        
-        # The target values are y[max(self.n, self.d + self.m):]
+
+        self.phi = self.build_arx_regressor(u, y) 
         y_target = y[max(self.n, self.d + self.m):]
-        
         # Fit the linear regression model with the regressor matrix (X) and target values (Y)
         self.model.fit(self.phi, y_target)
         
@@ -72,7 +58,6 @@ class ARXModel(BaseEstimator, RegressorMixin):
     
     def check_stability(self):
         """
-        Check the stability of the ARX model based on the roots of the AR characteristic equation.
         Stability criterion: All roots must lie inside the unit circle in the complex plane.
         """
         if self.ar_coefficients is None:
@@ -81,11 +66,7 @@ class ARXModel(BaseEstimator, RegressorMixin):
         # Form the AR characteristic polynomial: 1 - θ_1 * z^{-1} - θ_2 * z^{-2} - ... - θ_n * z^{-n}
         # We need to find the roots of the polynomial with coefficients [1, -θ_1, -θ_2, ..., -θ_n]
         poly_coeffs = np.concatenate(([1], -self.ar_coefficients))
-        
-        # Calculate the roots of the characteristic polynomial
         roots = np.roots(poly_coeffs)
-        
-        # Check if all roots lie inside the unit circle
         stable = np.all(np.abs(roots) < 1)
         
         if stable:
@@ -93,25 +74,25 @@ class ARXModel(BaseEstimator, RegressorMixin):
         else:
             return False
         
-    def predict(self, u, phi0, uold):
+    def predict(self, u, phi_0, u_old):
         # Use the pre-built regressor matrix from fit
         if self.phi is None:
             raise ValueError("Model has not been fitted yet.")
         
-        phi_k = phi0.copy()  # Make sure we don't modify the original phi0 list
+        phi_k = phi_0.copy() 
         predictions = []
 
         for k in range(len(u)):
-            y_k = self.model.predict([phi_k])[0]  # Model expects 2D array
+            y_k = self.model.predict([phi_k])[0]
             
             predictions.append(y_k)
             
-            # Update phiI (regressor matrix) for the next time step
-            if len(uold) != 0:
-                # Use elements from uold for the initial iterations
+            # Update phi_k (regressor matrix) for the next time step
+            if len(u_old) != 0:
+                # Use elements from u_old for the initial iterations
                 phi_k = [y_k] + (phi_k[:-1])  # Add the latest prediction at the start and pop the last element
-                phi_k[self.n] = uold[-1]  # Replace the relevant u term
-                uold.pop()  # Update uold
+                phi_k[self.n] = u_old[-1]  # Replace the relevant u term
+                u_old.pop()  # Update u_old
             else:
                 # Use elements from the u sequence after the initial iterations
                 phi_k = [y_k] + (phi_k[:-1])  # Add the latest prediction at the start and pop the last element
@@ -141,21 +122,16 @@ def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range)
                 model.fit(u_train, y_train)
 
                 if model.check_stability:
-                    # Predict using the saved regressor matrix
-                    # Step 1: Take the last 'n' elements from vector y
-                    phi0 = y_train[-1:-(n+1):-1].tolist()
+                    # Predict using the saved regressor matrix from fit process.
+                    # Create the line 0 of the new regressor matrix:
+                    phi_0 = y_train[-1:-(n+1):-1].tolist()
+                    u_part = u_train[-d:-(d+m+1):-1].tolist()
+                    phi_0.extend(u_part)
 
-                    # Step 2: Add elements from vector u, from index end-d to end-d-m
-                
-                    u_part = u_train[-(d):-(d+m+1):-1].tolist()
+                    u_old = u_train[-1:-d:-1].tolist()
 
-                    # Step 3: Concatenate both parts
-                    phi0.extend(u_part)
+                    y_pred = model.predict(u_test, phi_0, u_old)  # Using the stored phi
 
-                    uold = u_train[-1:-d:-1].tolist()
-
-                    y_pred = model.predict(u_test, phi0, uold)  # Using the stored phi
-                
                     # Calculate SSE (Sum of Squared Errors)
                     sse = calculate_sse(y_test, y_pred)
                 
@@ -227,7 +203,7 @@ m_range = range(1, 10)  # Number of past inputs
 d_range = range(1, 10)  # Delay parameter
 
 # Manually split train/test data
-test_size = 510 #int(len(u_train)*0.2)
+test_size = int(len(u_train)*0.2)
 print('test size =',test_size)
 u_train_train = u_train[:-test_size]
 u_train_test = u_train[-test_size:]
@@ -248,22 +224,22 @@ model.n, model.m, model.d = best_params
 model.fit(u_train,y_train)
 
 # Step 1: Take the last 'n' elements from vector y
-phi0 = y_train[-1:-(model.n+1):-1].tolist()
+phi_0 = y_train[-1:-(model.n+1):-1].tolist()
 
 # Step 2: Add elements from vector u, from index end-d to end-d-m
 u_part = u_train[-(model.d):-(model.d+model.m+1):-1].tolist()
 
 # Step 3: Concatenate both parts
-phi0.extend(u_part)
+phi_0.extend(u_part)
 
-uold = u_train[-1:-model.d:-1].tolist()
+u_old = u_train[-1:-model.d:-1].tolist()
 
-y_test = model.predict(u_test,phi0,uold)
+y_test = model.predict(u_test,phi_0,u_old)
 
 y_submit = y_test[-400:]
 print('Check submission has right amount of elements:', len(y_submit))
 
-#np.save('y_submit.npy', y_submit) #Save last 400 values for submission
+np.save('y_test.npy', y_submit) #Save last 400 values for submission
 
 #print('Alpha=',model.model.alpha_)
 plot_results(y_train,y_test, u_train, u_test)
