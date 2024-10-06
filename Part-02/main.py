@@ -162,7 +162,6 @@ def brute_force_arx(u_train, y_train, u_test, y_test, n_range, m_range, d_range)
                 
     return best_params, best_sse, best_ypred
 
-
 def plot_validation(y_true, y_pred, u, test_size):
     
     # Generate x values corresponding to the index of the data points
