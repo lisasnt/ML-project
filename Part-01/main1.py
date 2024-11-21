@@ -79,7 +79,7 @@ outlier_mask = ~inlier_mask
 X_train_clean = X_train[inlier_mask]
 y_train_clean = y_train[inlier_mask]
 print(f"Number of inliers after RANSAC: {np.sum(inlier_mask)}")
-
+'''
 # Plot outliers in red
 fig, axs = plt.subplots(2, 3, figsize=(20, 12))
 fig.suptitle('Features vs Toxic Algae Concentration (Inliers and Outliers)', fontsize=16)
@@ -97,7 +97,7 @@ for i, ax in enumerate(axs.flat):
         fig.delaxes(ax) 
 plt.tight_layout()
 plt.show()
-
+'''
 # Create test and training set
 X_train_clean_train, X_train_clean_test, \
     y_train_clean_train, y_train_clean_test = train_test_split(X_train_clean, y_train_clean, test_size=0.2, random_state=14)
@@ -109,8 +109,8 @@ y_pred_train_test = regr.predict(X_train_clean_test)
 
 sse = calculate_sse(y_train_clean_test, y_pred_train_test)
 r2 = calculate_r2(y_train_clean_test, y_pred_train_test)
-#print(f"Coefficients:", regr.coef_)
-#print(f"Intercept:", regr.intercept_)
+print(f"Linear Regression Coefficients:", regr.coef_)
+print(f"Linear Regression Intercept:", regr.intercept_)
 print(f"Linear Regression SSE:\t{sse}")
 print(f"Linear Regression R^2:\t{r2}")
 
@@ -124,6 +124,9 @@ ridge_cv.fit(X_train_clean_train, y_train_clean_train)
 y_pred_ridge = ridge_cv.predict(X_train_clean_test)
 sse = calculate_sse(y_train_clean_test,y_pred_ridge)
 r2 = calculate_r2(y_train_clean_test,y_pred_ridge)
+print("Ridge Best alpha:\t", ridge_cv.best_params_['alpha'])
+print("Ridge Coefficients:\t", ridge_cv.best_estimator_.coef_)
+print("Ridge Intercept:\t", ridge_cv.best_estimator_.intercept_)
 print("Ridge SSE:\t\t", sse)
 print("Ridge R^2:\t\t", r2)
 
@@ -132,10 +135,12 @@ lasso = linear_model.LassoCV(cv=15, random_state=190)
 lasso.fit(X_train_clean_train, y_train_clean_train)
 alpha_lasso = lasso.alpha_
 beta_lasso = lasso.coef_
-#print(f"Best alpha for Lasso: {lasso.alpha_}")
 y_pred_lassoCV = lasso.predict(X_train_clean_test)
 sse = calculate_sse(y_train_clean_test,y_pred_lassoCV)
 r2 = calculate_r2(y_train_clean_test,y_pred_lassoCV)
+print("Lasso Best alpha:\t", lasso.alpha_)
+print("Lasso Coefficients:\t", lasso.coef_)
+print("Lasso Intercept:\t", lasso.intercept_)
 print("Lasso SSE:\t\t", sse)
 print("Lasso R^2:\t\t", r2)
 
@@ -158,8 +163,8 @@ print(f"Linear Regression R^2: {r2}")
 
 #Lasso is the best one
 y_test = lasso.predict(X_test)
-np.save('y_test.npy', y_test)  
-
+#np.save('y_test.npy', y_test)  
+'''
 # Plot Predictions vs test set
 fig, axs = plt.subplots(2, 3, figsize=(20, 12))
 fig.suptitle('Features vs Toxic Algae Concentration', fontsize=16)
@@ -175,3 +180,4 @@ for i, ax in enumerate(axs.flat):
         fig.delaxes(ax) 
 plt.tight_layout()
 plt.show()
+'''
